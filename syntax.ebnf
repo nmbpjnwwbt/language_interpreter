@@ -1,0 +1,114 @@
+digit_without_zero = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
+digit = digit_without_zero, {digit};
+comment = "//", {? all except \n ?}, "\n";
+white = " " | "\t" | "\v" | "\n" | comment;
+letter = "A" | "B" | "C" | "D" | "E" | "F" | "G"
+       | "H" | "I" | "J" | "K" | "L" | "M" | "N"
+       | "O" | "P" | "Q" | "R" | "S" | "T" | "U"
+       | "V" | "W" | "X" | "Y" | "Z" | "a" | "b"
+       | "c" | "d" | "e" | "f" | "g" | "h" | "i"
+       | "j" | "k" | "l" | "m" | "n" | "o" | "p"
+       | "q" | "r" | "s" | "t" | "u" | "v" | "w"
+       | "x" | "y" | "z";
+escape = "\'" | '\"' | '\?' | '\\' | '\a' | '\b'
+       | '\f' | '\n' | '\r' | '\t' | '\v' | '\0';
+
+
+name_char = letter | digit | "_";
+
+type_identifier = "bool" | "char" | "uchar" | "int" | "uint" | "float" | "str";
+bool = "True" | "False";
+int = "0" | (digit_without_zero, {digit});
+float = int, ".", {digit};
+str = "\"", {(? all except \n and "\"" ?) | escape}, "\"";
+
+crementation_operator = "++" | "--";
+unary_operator = "-" | "!" | crementation_operator;
+multiplicative_operator = "*" | "/" | "%";
+additive_operator = "+" | "-";
+shift_operator = "<<" | ">>";
+relational_operator = ">=" | "<="| "<" | ">";
+eqiality_operator = "==" | "!=";
+and_operator = "&";
+xor_operator = "^";
+or_operator = "|";
+log_and_operator = "&&";
+log_or_operator = "||";
+
+assignment_operator = "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "<<=" | ">>=" | "^=";
+id = (letter | "_"), {name_char};
+
+
+literal = bool
+        | int
+        | float
+        | str;
+var_decl_helper = {white}, id, {white}, ["=", {white}, (id | literal)];
+arg_decl_helper = ["@"], {white}, type_identifier, white, var_decl_helper;
+variable_declarator = arg_decl_helper, {{white}, ",", var_decl_helper}, {white}, ";";
+function_header = ["@"], {white}, type_identifier, white, {white}, id, {white} "(",
+                {{white}, arg_decl_helper}, {white}, ")";
+function_declarator = function_header, {white}, block;
+
+
+function_call = id, {white}, "(", {white}, expression, {{white}, ",", {white} , expression}, {white}, ")";
+crementation_expression = (id, {white}, crementation_operator)
+						| (crementation_operator, {white}, id);
+primary_expression = id
+                   | literal;
+call_expression = primary_expression
+                | function_call;
+access_expression = call_expression
+                  | expression, {white}, "[", {white}, expression, {white}, "]";
+unary_expression = (unary_operator, {white}, id)
+				 | crementation_expression
+                 | access_expression;
+multiplicative_expression = unary_expression
+			              | multiplicative_expression, {white}, multiplicative_operator, {white}, unary_expression;
+additive_expression = multiplicative_expression
+					| additive_expression, {white}, additive_operator, {white}, multiplicative_expression;
+shift_expression = additive_expression
+                 | shift_expression, {white}, shift_operator, {white}, additive_expression;
+relational_expression = shift_expression
+                      | relational_expression, {white}, relational_operator, {white}, shift_expression;
+equality_expression = relational_expression
+                    | equality_expression, {white}, equality_expression, {white}, relational_expression;
+and_expression = equality_expression
+               | and_expression, {white}, and_operator, {white}, equality_expression;
+xor_expression = and_expression
+               | xor_expression, {white}, xor_operator, {white}, and_expression;
+or_expression = xor_expression
+              | or_expression, {white}, or_operator, {white}, xor_expression;
+log_and_expression = or_expression
+                   | log_and_expression, {white}, log_and_operator, {white}, or_expression;
+log_or_expression = log_and_expression
+                  | log_or_expression, {white}, log_or_operator, {white}, log_and_expression;
+assignment_expression = log_or_expression
+                      | id, {white}, assignment_operator, {white}, assignment_expression;
+expression = assignment_expression
+           | "(", {white}, expression, {white}, ")";
+
+special_instruction = "continue"
+                    | "break"
+                    | ("return", {white}, expression);
+instruction = ([expression], {white}, ";")
+            | (special_instruction, {white}, ";")
+            | variable_declarator
+            | function_declarator
+            | while_loop
+            | if_statement
+            | switch_statement;
+instructions = instruction, {instruction};
+block = ("{", {white}, instructions, {white}, "}")
+      | instruction;
+while_loop = "while", {white}, "(", {white}, expression, {white}, ")", {white},
+           block;
+if_statement = "if", {white}, "(", {white}, expression, {white}, ")", {white},
+             block, {white},
+             ["else"], {white}, (instruction | (block));
+switch_statement = "switch", {white}, "(", {white}, expression, {white}, ")", {white},
+                "{", {{white}, (expression | "else"), {white}, "->", {white}, block}, {white}, "}";
+
+
+
+

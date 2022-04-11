@@ -14,9 +14,7 @@ typy podstawowe (nie ma klas, więc jedyne):
 
 * bool
 * char (8b)
-* uchar
 * int (32b)
-* uint
 * float (32b)
 * str
 
@@ -35,7 +33,7 @@ int GCD(@int a, int b){
         buf=a%buf2;
         a=buf2; // a jest mutowalne
     }
-    return a;
+    return a; // zwracane przez wartość
 }
 
 int a=16, b=9;
@@ -49,25 +47,31 @@ print(b); // 9
 {a=8;} // to nie jest nowa zmienna
 print(a); // 8
 
+int GCD(int a){
+    if(a){
+        return GCD(a-1)+2;
+    }else
+        return 5;
+}
+int GCD(int a){return 8;}
+
 switch(a){
     0 -> {print("asd");}
     1 -> print("dsa");
     2 -> print("asd"); print("dsa"); // błąd, powinien być blok lub jedna instrukcja
     "16" -> print("this will be printed");
+    GCD -> print("it's 8! Meaning true. Meaning \"else\" will never run"); // musi przyjmować dokładnie jeden parametr, otrzyma zmienną "a"
     else -> print("123");
 }
 
 @str line; // ""
 if(a==str=getline()){
-  print("correct!");
+    print("correct!");
 }else if(str=="super_secret$tring")
-  print("how did you know?");
+    print("how did you know?");
 else{
-  print("nope");
+    print("nope");
 }
-
-int GCD(){return 5;}
-int GCD(){return 8;}
 
 print(GCD()); // 8
 print(GCD(5, 8)); // 4

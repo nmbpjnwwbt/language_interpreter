@@ -4,7 +4,11 @@ CONFIG -= app_bundle
 CONFIG -= qt
 
 SOURCES += \
+        lexer.cpp \
         main.cpp
 
 DISTFILES += \
     syntax.ebnf
+
+HEADERS += \
+    lexer.h

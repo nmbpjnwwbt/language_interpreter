@@ -14,9 +14,9 @@ escape = "\'" | '\"' | '\?' | '\\' | '\a' | '\b'
 
 name_char = letter | digit | "_";
 
-type_identifier = "bool" | "char" | "uchar" | "int" | "uint" | "float" | "str";
+type_identifier = "bool" | "char" | "int" | "float" | "str";
 function_type_identifier = type_identifier | "void";
-bool = "True" | "False";
+bool = "true" | "false";
 int = "0" | (digit_without_zero, {digit});
 float = int, ".", {digit};
 str = "\"", {(? all except \n and "\"" ?) | escape}, "\"";

@@ -1,189 +1,72 @@
 #include <iostream>
-#include <variant>
-#include <string>
-#include <sstream>
+#include <fstream>
+#include "lexer.h"
 
-class Token{public:
+Lexer lexer;
+Token tokenbuf(Token::Type::None, "");
 
-    enum Type{
-        None, // failed to construct
-        Type_identifier,
-        Literal_bool,
-        Literal_int,
-        Literal_float,
-        Literal_str,
-        Operator,
-        Id,
-        Comment,
-    };
-
-    friend std::ostream& operator<< (std::ostream& os, Token val);
-
-    Token(Type type, std::variant<std::string, int, float> value="", int line=-1, int character=-1){
-        this->type=type;
-        val=value;
-        this->line=line;
-        this->character=character;
-    }
-
-    std::string toString(){
-        std::string out="Token(";
-        switch(type){
-            case None:
-                out+="None";
-            break;
-            case Type_identifier:
-                out+="Type_identifier";
-            break;
-            case Literal_bool:
-                out+="Literal_bool";
-            break;
-            case Literal_int:
-                out+="Literal_int";
-            break;
-            case Literal_float:
-                out+="Literal_float";
-            break;
-            case Literal_str:
-                out+="Literal_str";
-            break;
-            case Operator:
-                out+="Operator";
-            break;
-            case Id:
-                out+="Id";
-            break;
-            case Comment:
-                out+="Comment";
-            break;
-        }
-        out+=", ";
-        switch(val.index()){
-            case 0:
-                out+='"'+std::get<std::string>(val)+'"';
-            break;
-            case 1:
-                out+=std::to_string(std::get<int>(val));
-            break;
-            case 2:
-                out+=std::to_string(std::get<float>(val));
-            break;
-        }
-        out+=", "+std::to_string(line)+", "+std::to_string(character)+")";
-        return out;
-    }
-
-
-    Type type;
-    std::variant<std::string, int, float> val;
-    int line=0, character=0;
-};
-
-std::ostream& operator<< (std::ostream& os, Token val){
-    os<<val.toString();
-    return os;
+void checkToken(std::istream &is, Token token){
+    if((tokenbuf=lexer.getToken(is))!=token)
+        std::cout<<tokenbuf<<"\n";
 }
-
-class Lexer{public:
-
-
-    Token getToken(std::istream &in){
-
-        while(true){// skip whites
-            int test=in.peek();
-            if(test==std::char_traits<char>::eof()){
-                return Token(Token::Type::None);
-            }
-
-            if(isspace(test)){
-                if(test=='\n'){
-                    line++;
-                    character=0;
-                }else
-                    character++;
-                in.get();
-                continue;
-            }
-            break;
-        }
-        int start_pos=in.tellg();
-        int first_char=in.get();
-        character++;
-
-        switch(first_char){
-            case'-': // operators
-                if(in.peek()=='>'){
-                    character++;
-                    in.get();
-                    return Token(Token::Type::Operator, std::string(1, char(first_char))+'>', line, character-2);
-                }
-            case'+':
-            case'|':
-            case'&':
-            case'<':
-            case'>':
-            case'=':
-                if(in.peek()==first_char){
-                    character++;
-                    in.get();
-                    return Token(Token::Type::Operator, std::string(2, char(first_char)), line, character-2);
-                }
-            case'*':
-            case'^':
-            case'!':
-                if(in.peek()=='='){
-                    character++;
-                    in.get();
-                    return Token(Token::Type::Operator, std::string(1, char(first_char))+'=', line, character-2);
-                }
-            case',':
-            case'(':
-            case')':
-            case'{':
-            case'}':
-            case'[':
-            case']':
-            return Token(Token::Type::Operator, std::string(1, char(first_char)), line, character-1);
-            case'/':
-                if(in.peek()==first_char){
-                    int pos=character+1;
-                    character=0;
-                    in.get();
-                    std::string comment="";
-                    int next_char=0;
-                    while(true){
-                        next_char=in.get();
-                        if(next_char==std::char_traits<char>::eof() || next_char=='\n')
-                            break;
-                        else
-                            comment+=next_char;
-                    }
-                    return Token(Token::Type::Comment, comment, line++, pos);
-                }else
-                    return Token(Token::Type::Operator, std::string(1, char(first_char)), line, character-1);
-            break;
-        }
-    }
-
-    void reset_position(){
-        line=1;
-        character=0;
-    }
-
-    int line=1;
-    int character=0;
-};
-
 
 int main()
 {
-    Lexer lexer;
-    std::stringstream dsa("     \n++=//asdfghjkl\n//hehe");
-    std::cout<<lexer.getToken(dsa)<<"\n";
-    std::cout<<lexer.getToken(dsa)<<"\n";
-    std::cout<<lexer.getToken(dsa)<<"\n";
-    std::cout<<lexer.getToken(dsa)<<"\n";
-    std::cout<<lexer.getToken(dsa)<<"\n";
+    std::fstream dsa;
+    dsa.open("test.int", std::ios::in|std::ios::binary);
 
+    checkToken(dsa, Token(Token::Type::Operator, "++", 2, 0));
+    checkToken(dsa, Token(Token::Type::Operator, "=",  2, 2));
+    checkToken(dsa, Token(Token::Type::Comment, "asdfghjkl1234", 2, 9));
+    checkToken(dsa, Token(Token::Type::Literal_int, 1234, 3, 0));
+    checkToken(dsa, Token(Token::Type::Comment, "hehe", 3, 6));
+    checkToken(dsa, Token(Token::Type::Literal_int, 1, 4, 0));
+    checkToken(dsa, Token(Token::Type::Operator, "/", 4, 1));
+    checkToken(dsa, Token(Token::Type::Literal_int, 2, 4, 2));
+    checkToken(dsa, Token(Token::Type::Literal_float, 123.5423f, 5, 0));
+    checkToken(dsa, Token(Token::Type::Literal_int, 123, 6, 0));
+    checkToken(dsa, Token(Token::Type::Literal_int, int(52983568273456298375692835692836598236592834659823456928357692835692835769837452), 6, 4));
+    if(lexer.warnings.size()!=1)
+        std::cout<<"warnings after line 6:"<<lexer.warnings.size();
+    else{
+        if(lexer.warnings[0]!=Token(Token::Type::Warning, "integer overflow", 6, 4))
+            std::cout<<lexer.warnings[0]<<"\n";
+    }
+    lexer.warnings.clear();
+
+    checkToken(dsa, Token(Token::Type::Literal_float, 123.89172f, 7, 0));
+    if(lexer.warnings.size()!=1)
+        std::cout<<"warnings after line 6:"<<lexer.warnings.size();
+    else{
+        if(lexer.warnings[0]!=Token(Token::Type::Warning, "float literals with precision more than 10**-18 unsupported", 7, 22))
+            std::cout<<lexer.warnings[0]<<"\n";
+    }
+    lexer.warnings.clear();
+
+    checkToken(dsa, Token(Token::Type::Id, "test", 8, 0));
+    checkToken(dsa, Token(Token::Type::Literal_bool, 0, 8, 5));
+    checkToken(dsa, Token(Token::Type::Id, "trye", 8, 11));
+    checkToken(dsa, Token(Token::Type::Literal_bool, 1, 8, 16));
+    checkToken(dsa, Token(Token::Type::Id, "whilez", 8, 21));
+    checkToken(dsa, Token(Token::Type::Literal_str, "aaa", 8, 29));
+    checkToken(dsa, Token(Token::Type::Type_identifier, "int", 9, 0));
+    checkToken(dsa, Token(Token::Type::Id, "ints", 9, 4));
+    checkToken(dsa, Token(Token::Type::Id, "in", 9, 9));
+    checkToken(dsa, Token(Token::Type::Type_identifier, "str", 9, 12));
+    checkToken(dsa, Token(Token::Type::Id, "string", 9, 16));
+    checkToken(dsa, Token(Token::Type::Type_identifier, "bool", 10, 0));
+    checkToken(dsa, Token(Token::Type::Keyword, "@", 10, 5));
+    checkToken(dsa, Token(Token::Type::Operator, "{", 10, 6));
+    checkToken(dsa, Token(Token::Type::Type_identifier, "float", 10, 7));
+    checkToken(dsa, Token(Token::Type::Keyword, "if", 10, 13));
+    checkToken(dsa, Token(Token::Type::Operator, "(", 10, 15));
+    checkToken(dsa, Token(Token::Type::Operator, ")", 10, 16));
+    checkToken(dsa, Token(Token::Type::Operator, "}", 10, 18));
+    checkToken(dsa, Token(Token::Type::Keyword, "else", 10, 19));
+    checkToken(dsa, Token(Token::Type::Keyword, "switch", 10, 24));
+    checkToken(dsa, Token(Token::Type::Id, "switcher", 11, 1));
+    checkToken(dsa, Token(Token::Type::Keyword, "break", 11, 10));
+    checkToken(dsa, Token(Token::Type::Keyword, "continue", 11, 16));
+    checkToken(dsa, Token(Token::Type::Id, "switcher", 11, 1));
     return 0;
 }

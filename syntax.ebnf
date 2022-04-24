@@ -1,5 +1,5 @@
 digit_without_zero = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
-digit = digit_without_zero, [digit];
+digit = digit_without_zero, {digit};
 letter = "A" | "B" | "C" | "D" | "E" | "F" | "G"
        | "H" | "I" | "J" | "K" | "L" | "M" | "N"
        | "O" | "P" | "Q" | "R" | "S" | "T" | "U"
@@ -16,7 +16,7 @@ name_char = letter | digit | "_";
 
 type_identifier = "bool" | "char" | "int" | "float" | "str";
 function_type_identifier = type_identifier | "void";
-bool = "true" | "false";
+bool = "True" | "False";
 int = "0" | (digit_without_zero, {digit});
 float = int, ".", {digit};
 str = "\"", {(? all except \n and "\"" ?) | escape}, "\"";
@@ -53,7 +53,8 @@ function_call = id, "(", [expression, {",", expression}], ")";
 crementation_expression = (id, crementation_operator)
                            | (crementation_operator, id);
 primary_expression = id
-                   | literal;
+                   | literal
+                   | "(", expression, ")";
 call_expression = primary_expression
                 | function_call;
 access_expression = call_expression
@@ -83,8 +84,7 @@ log_or_expression = log_and_expression
                   | log_or_expression, log_or_operator, log_and_expression;
 assignment_expression = log_or_expression
                       | id, assignment_operator, assignment_expression;
-expression = assignment_expression
-           | "(", expression, ")";
+expression = assignment_expression;
 
 special_instruction = "continue"
                     | "break"

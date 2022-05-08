@@ -1,7 +1,7 @@
 #include "lexer.h"
 #include <type_traits>
 #include <exception>
-#include <iostream>
+#include <cmath>
 
 bool isLetter(int ch){return (ch>='a' &&ch<='z') || (ch>='A' &&ch<='Z') || ch=='_';}
 bool isNumber(int ch){return (ch>='0' &&ch<='9');}
@@ -20,12 +20,21 @@ const std::map<Token::Type, std::string> tokenToStr={
     {Token::Type::Warning, "Warning"}
 };
 
-Token::Token(Type type, std::variant<std::string, int, float> value, int line, int character){
-    this->type=type;
-    val=std::move(value);
-    this->line=line;
-    this->character=character;
-}
+Token::Token(Type type, std::variant<std::string, int, float> value, int line, int character):
+    type(type),
+    val(std::move(value)),
+    line(line),
+    character(character){}
+Token::Token(int line, int character, Type type, char ch):
+    type(type),
+    val(std::string(1,ch)),
+    line(line),
+    character(character){}
+Token::Token(int line, int character, Type type, char ch1, char ch2):
+    type(type),
+    val(std::string(1,ch1)+ch2),
+    line(line),
+    character(character){}
 
 std::string Token::toString() const{
     std::string out="Token("+tokenToStr.at(type)+", ";
@@ -76,14 +85,16 @@ int istreamProxy::peek() const{
 }
 
 std::istream& istreamProxy::putback(char c){
-    _character--;
+    if(_character)
+        _character--;
     if(c=='\n')
         _line--;
     return _in->putback(c);
 }
 
 std::istream& istreamProxy::putback_buffed(char c){
-    _character--;
+    if(_character)
+        _character--;
     if(c=='\n')
         _line--;
     buffer.push(c);
@@ -107,17 +118,17 @@ Token Lexer::getToken(){
 }
 
 Token Lexer::getOperatorToken(){
+    int l=is.line(), c=is.character();
     int first_char=is.get();
-
     switch(first_char){
         case'@':
-        return   Token(Token::Type::Keyword, std::string(1, char(first_char)), is.line(), is.character()-1);
+        return   Token(l, c, Token::Type::Keyword, first_char);
         case'\"':
         return getStringToken();
         case'-':
             if(is.peek()=='>'){
                 is.get();
-                return Token(Token::Type::Operator, std::string(1, char(first_char))+'>', is.line(), is.character()-2);
+                return Token(l, c, Token::Type::Operator, first_char, '>');
             }
         case'+':
         case'|':
@@ -127,14 +138,14 @@ Token Lexer::getOperatorToken(){
         case'=':
             if(is.peek()==first_char){
                 is.get();
-                return Token(Token::Type::Operator, std::string(2, char(first_char)), is.line(), is.character()-2);
+                return Token(l, c, Token::Type::Operator, first_char, first_char);
             }
         case'*':
         case'^':
         case'!':
             if(is.peek()=='='){
                 is.get();
-                return Token(Token::Type::Operator, std::string(1, char(first_char))+'=', is.line(), is.character()-2);
+                return Token(l, c, Token::Type::Operator, first_char, '=');
             }
         case',':
         case';':
@@ -144,22 +155,16 @@ Token Lexer::getOperatorToken(){
         case'}':
         case'[':
         case']':
-        return Token(Token::Type::Operator, std::string(1, char(first_char)), is.line(), is.character()-1);
+        return Token(l, c, Token::Type::Operator, first_char);
         case'/':
             if(is.peek()==first_char){
                 is.get();
-                int pos=is.character();
-                std::string comment="";
-
-                int next_char;
-                for(next_char=is.get(); is.character() && next_char!=std::char_traits<char>::eof(); next_char=is.get()){
-                    comment+=next_char;
-                }
-                if(next_char==std::char_traits<char>::eof())
-                    return Token(Token::Type::Comment, comment, is.line(), pos);
-                return Token(Token::Type::Comment, comment, is.line()-1, pos);
+                return getCommentToken();
+            }else if(is.peek()==first_char){
+                is.get();
+                return Token(l, c, Token::Type::Comment, first_char, first_char);
             }else
-                return Token(Token::Type::Operator, std::string(1, char(first_char)), is.line(), is.character()-1);
+                return Token(l, c, Token::Type::Operator, first_char);
     }
     is.putback_buffed(first_char);
     return Token();
@@ -216,8 +221,21 @@ Token Lexer::getStringToken(){
     return Token(Token::Type::Literal_str, str, line_pos, char_pos);
 }
 
+Token Lexer::getCommentToken(){
+    int pos=is.character(), l=is.line();
+    std::string comment="";
+
+    int next_char;
+    for(next_char=is.get(); is.character() && next_char!=std::char_traits<char>::eof(); next_char=is.get()){
+        comment+=next_char;
+    }
+    if(next_char==std::char_traits<char>::eof())
+        return Token(Token::Type::Comment, comment, l, pos);
+    return Token(Token::Type::Comment, comment, l, pos);
+}
+
 Token Lexer::getNumberToken(){
-    uint32_t intbuf=0;
+    uint64_t intbuf=0;
     int float_digits=0;
     float floatbuf=0;
     bool overflow_hit=false;
@@ -258,10 +276,7 @@ Token Lexer::getNumberToken(){
             }
             ch=is.get();
         }
-        multiplier=1;
-        for(int i=0; i<float_digits; i++){
-            multiplier*=10;
-        }
+        multiplier=std::pow(10, float_digits);
         floatbuf+=double(floatintbuf)/multiplier;
         is.putback_buffed(ch);
         return Token(Token::Type::Literal_float, floatbuf, is.line(), chnum);
@@ -278,6 +293,18 @@ Token Lexer::getNumberToken(){
 
 Token Lexer::getIdToken(){
     std::string id="";
+    const std::map<std::string, Token::Type> map={
+        {"switch", Token::Type::Keyword},
+        {"if", Token::Type::Keyword},
+        {"else", Token::Type::Keyword},
+        {"while", Token::Type::Keyword},
+        {"break", Token::Type::Keyword},
+        {"continue", Token::Type::Keyword},
+        {"bool", Token::Type::Type_identifier},
+        {"int", Token::Type::Type_identifier},
+        {"float", Token::Type::Type_identifier},
+        {"str", Token::Type::Type_identifier}
+    };
 
     int ch, pos=is.character();
     for(ch=is.get(); isLetter(ch)||isNumber(ch); ch=is.get()){
@@ -288,28 +315,12 @@ Token Lexer::getIdToken(){
         return Token(Token::Type::Literal_bool, 1, is.line(), pos);
     if(id=="false")
         return Token(Token::Type::Literal_bool, 0, is.line(), pos);
-    if(id=="switch")
-        return Token(Token::Type::Keyword, id, is.line(), pos);
-    if(id=="if")
-        return Token(Token::Type::Keyword, id, is.line(), pos);
-    if(id=="else")
-        return Token(Token::Type::Keyword, id, is.line(), pos);
-    if(id=="while")
-        return Token(Token::Type::Keyword, id, is.line(), pos);
-    if(id=="break")
-        return Token(Token::Type::Keyword, id, is.line(), pos);
-    if(id=="continue")
-        return Token(Token::Type::Keyword, id, is.line(), pos);
-    if(id=="bool")
-        return Token(Token::Type::Type_identifier, id, is.line(), pos);
-    if(id=="int")
-        return Token(Token::Type::Type_identifier, id, is.line(), pos);
-    if(id=="float")
-        return Token(Token::Type::Type_identifier, id, is.line(), pos);
-    if(id=="str")
-        return Token(Token::Type::Type_identifier, id, is.line(), pos);
     if(id.empty())
         return Token();
+
+    auto asd=map.find(id);
+    if(asd!=map.end())
+        return Token(asd->second, id, is.line(), pos);
     return Token(Token::Type::Id, id, is.line(), pos);
 }
 

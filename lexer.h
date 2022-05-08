@@ -49,6 +49,8 @@ class Token{public:
     friend std::ostream& operator<< (std::ostream& os, Token val);
 
     Token(Type type=Type::None, std::variant<std::string, int, float> value="", int line=-1, int character=-1);
+    Token(int line, int character, Type type, char ch);
+    Token(int line, int character, Type type, char ch1, char ch2);
 
     std::string toString() const;
 
@@ -65,6 +67,7 @@ class Token{public:
     }
     explicit operator bool() const{return type!=Type::None;}
 
+    private:
     Type type;
     std::variant<std::string, int, float> val;
     int line=0, character=0;
@@ -72,7 +75,7 @@ class Token{public:
 extern const std::map<Token::Type, std::string> tokenToStr;
 
 
-std::ostream& operator<< (std::ostream& os, Token val);
+std::ostream& operator<< (std::ostream& os, const Token val);
 
 class istreamProxy{
 public:
@@ -111,6 +114,7 @@ public:
 
     Token getOperatorToken();
     Token getStringToken();
+    Token getCommentToken();
     Token getNumberToken();
     Token getIdToken();
 

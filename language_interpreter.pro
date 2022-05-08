@@ -1,7 +1,6 @@
 TEMPLATE = app
-CONFIG += console c++17
-CONFIG -= app_bundle
-CONFIG -= qt
+CONFIG += c++17
+QT += testlib
 
 SOURCES += \
         lexer.cpp \
@@ -12,3 +11,9 @@ DISTFILES += \
 
 HEADERS += \
     lexer.h
+
+
+
+
+target.path = .
+INSTALLS += target

@@ -58,7 +58,7 @@ primary_expression = id
 call_expression = primary_expression
                 | function_call;
 access_expression = call_expression
-                  | expression, "[", expression, "]";
+                  | call_expression, "[", expression, "]";
 unary_expression = (unary_operator, primary_expression)
                    | crementation_expression
                  | access_expression;

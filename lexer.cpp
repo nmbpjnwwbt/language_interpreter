@@ -3,6 +3,7 @@
 #include <exception>
 #include <cmath>
 
+namespace {
 bool isLetter(int ch){return (ch>='a' &&ch<='z') || (ch>='A' &&ch<='Z') || ch=='_';}
 bool isNumber(int ch){return (ch>='0' &&ch<='9');}
 const std::map<Token::Type, std::string> tokenToStr={
@@ -14,47 +15,51 @@ const std::map<Token::Type, std::string> tokenToStr={
     {Token::Type::Literal_float, "Literal_float"},
     {Token::Type::Literal_str, "Literal_str"},
     {Token::Type::Operator, "Operator"},
+    {Token::Type::EndOfInstruction, "EOI"},
     {Token::Type::Id, "Id"},
     {Token::Type::Comment, "Comment"},
     {Token::Type::Keyword, "Keyword"},
     {Token::Type::Warning, "Warning"}
 };
+} //namespace
 
 Token::Token(Type type, std::variant<std::string, int, float> value, int line, int character):
-    type(type),
+    type_(type),
     val(std::move(value)),
-    line(line),
-    character(character){}
-Token::Token(int line, int character, Type type, char ch):
-    type(type),
-    val(std::string(1,ch)),
-    line(line),
-    character(character){}
-Token::Token(int line, int character, Type type, char ch1, char ch2):
-    type(type),
-    val(std::string(1,ch1)+ch2),
-    line(line),
-    character(character){}
+    pos(line, character){}
+Token::Token(int line, int character, Type type, std::string str):
+    type_(type),
+    val(str),
+    pos(line, character){}
 
 std::string Token::toString() const{
-    std::string out="Token("+tokenToStr.at(type)+", ";
+    std::string out="Token("+tokenToStr.at(type_)+", ";
 
-    switch(val.index()){
-        case 0:
-            out+='"'+std::get<std::string>(val)+'"';
-        break;
-        case 1:
-            out+=std::to_string(std::get<int>(val));
-        break;
-        case 2:
-            out+=std::to_string(std::get<float>(val));
-        break;
-    }
-    out+=", "+std::to_string(line)+", "+std::to_string(character)+")";
+
+    if(std::holds_alternative<std::string>(val))
+        out+='"'+std::get<std::string>(val)+'"';
+    else if(std::holds_alternative<int>(val))
+        out+=std::to_string(std::get<int>(val));
+    else if(std::holds_alternative<float>(val))
+        out+=std::to_string(std::get<float>(val));
+
+    out+=", "+std::to_string(pos.first)+", "+std::to_string(pos.second)+")";
     return out;
 }
 
-std::ostream& operator<< (std::ostream& os, Token val){
+bool Token::isValue(std::string str){
+    if(std::holds_alternative<std::string>(val))
+        if(std::get<std::string>(val)==str)
+            return true;
+    return false;
+}
+std::string Token::getStrVal(){
+    if(std::holds_alternative<std::string>(val))
+        return std::get<std::string>(val);
+    return "";
+}
+
+std::ostream& operator<< (std::ostream& os, const Token &val){
     os<<val.toString();
     return os;
 }
@@ -101,7 +106,27 @@ std::istream& istreamProxy::putback_buffed(char c){
     return *_in;
 }
 
+Token Lexer::peekToken(unsigned int n){
+    if(peeked.size()>n){
+        auto it=peeked.begin();
+        std::advance(it, n);
+        return *it;
+    }
+    while(peeked.size()<=n){
+        peeked.push_back(advancePeek());
+    }
+    return peeked.back();
+}
 Token Lexer::getToken(){
+    if(peeked.size()){
+        Token out=peeked.front();
+        peeked.pop_front();
+        return out;
+    }
+    return advancePeek();
+}
+
+Token Lexer::advancePeek(){
     skipWhites();
 
     if(is.peek()==std::char_traits<char>::eof())
@@ -118,17 +143,21 @@ Token Lexer::getToken(){
 }
 
 Token Lexer::getOperatorToken(){
-    int l=is.line(), c=is.character();
+    const int l=is.line(), c=is.character();
     int first_char=is.get();
+
+    auto makeToken=[=](Token::Type tokType, std::string str){
+        return Token(l, c, tokType, str);
+    };
     switch(first_char){
         case'@':
-        return   Token(l, c, Token::Type::Keyword, first_char);
+        return makeToken(Token::Type::Keyword, std::string(1, first_char));
         case'\"':
         return getStringToken();
         case'-':
             if(is.peek()=='>'){
                 is.get();
-                return Token(l, c, Token::Type::Operator, first_char, '>');
+                return makeToken(Token::Type::Operator, std::string(1, first_char)+'>');
             }
         case'+':
         case'|':
@@ -138,33 +167,35 @@ Token Lexer::getOperatorToken(){
         case'=':
             if(is.peek()==first_char){
                 is.get();
-                return Token(l, c, Token::Type::Operator, first_char, first_char);
+                return makeToken(Token::Type::Operator, std::string(2, first_char));
             }
         case'*':
+        case'%':
         case'^':
         case'!':
             if(is.peek()=='='){
                 is.get();
-                return Token(l, c, Token::Type::Operator, first_char, '=');
+                return makeToken(Token::Type::Operator, std::string(1, first_char)+'=');
             }
         case',':
-        case';':
         case'(':
         case')':
         case'{':
         case'}':
         case'[':
         case']':
-        return Token(l, c, Token::Type::Operator, first_char);
+        return makeToken(Token::Type::Operator, std::string(1, first_char));
+        case';':
+        return makeToken(Token::Type::EndOfInstruction, ";");
         case'/':
             if(is.peek()==first_char){
                 is.get();
                 return getCommentToken();
-            }else if(is.peek()==first_char){
+            }else if(is.peek()=='='){
                 is.get();
-                return Token(l, c, Token::Type::Comment, first_char, first_char);
+                return makeToken(Token::Type::Operator, std::string(1, first_char)+'=');
             }else
-                return Token(l, c, Token::Type::Operator, first_char);
+                return makeToken(Token::Type::Operator, std::string(1, first_char));
     }
     is.putback_buffed(first_char);
     return Token();
@@ -176,16 +207,14 @@ Token Lexer::getStringToken(){
     int ch, char_pos=is.character(), line_pos=is.line();
     std::streampos pos=is.tellg();
 
-    while(true){
-        ch=is.get();
+    ch=is.get();
+    while(escaped || ch!='"'){
         if(!escaped){
-            if(ch=='"')
-                break;
             if(ch==std::char_traits<char>::eof())
                 throw LexerException("stream ended on unfinished string", line_pos, char_pos);
             if(ch=='\n'){
                 is.seekg(pos);
-                is._line--;
+                is.decrement_line();
                 throw LexerException("multiline string literal", line_pos, char_pos);
             }
             if(ch=='\\')
@@ -217,6 +246,7 @@ Token Lexer::getStringToken(){
             }
             escaped=false;
         }
+        ch=is.get();
     }
     return Token(Token::Type::Literal_str, str, line_pos, char_pos);
 }
@@ -287,13 +317,13 @@ Token Lexer::getNumberToken(){
         else if(!returnNumber){
             return Token();
         }
-        return Token(Token::Type::Literal_int, int(intbuf), is.line(), chnum);
+        return Token(Token::Type::Literal_int, int(intbuf&0x7fffffff), is.line(), chnum);
     }
 }
 
 Token Lexer::getIdToken(){
     std::string id="";
-    const std::map<std::string, Token::Type> map={
+    static const std::map<std::string, Token::Type> map={
         {"switch", Token::Type::Keyword},
         {"if", Token::Type::Keyword},
         {"else", Token::Type::Keyword},
@@ -303,7 +333,8 @@ Token Lexer::getIdToken(){
         {"bool", Token::Type::Type_identifier},
         {"int", Token::Type::Type_identifier},
         {"float", Token::Type::Type_identifier},
-        {"str", Token::Type::Type_identifier}
+        {"str", Token::Type::Type_identifier},
+        {"void", Token::Type::Type_identifier}
     };
 
     int ch, pos=is.character();
@@ -318,9 +349,9 @@ Token Lexer::getIdToken(){
     if(id.empty())
         return Token();
 
-    auto asd=map.find(id);
-    if(asd!=map.end())
-        return Token(asd->second, id, is.line(), pos);
+    const auto iter=map.find(id);
+    if(iter!=map.end())
+        return Token(iter->second, id, is.line(), pos);
     return Token(Token::Type::Id, id, is.line(), pos);
 }
 

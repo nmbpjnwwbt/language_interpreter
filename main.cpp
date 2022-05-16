@@ -2,18 +2,18 @@
 #include <iostream>
 #include <fstream>
 #define TESTS
-#include "lexer.h"
+#include "parser.h"
 #include <QTest>
 #include <QtTest/QtTest>
+
 
 class Tests: public QObject{
     Q_OBJECT
 public:
-    Tests(){}
-    ~Tests(){}
 
 private slots:
-    void initTestCase(){}
+    void initTestCase(){
+    }
 
     void operatorTest1(){
         std::stringstream ss("+"); Lexer lex(ss);
@@ -154,7 +154,7 @@ private slots:
     }
     void operatorTest28(){
         std::stringstream ss(";"); Lexer lex(ss);
-        QCOMPARE(lex.getToken(), Token(Token::Type::Operator, ";", 1, 0));
+        QCOMPARE(lex.getToken(), Token(Token::Type::EndOfInstruction, ";", 1, 0));
         QCOMPARE(lex.getToken(), Token(Token::Type::None, "", 1, 1));
     }
     void operatorTest29(){
@@ -175,13 +175,14 @@ private slots:
         QCOMPARE(lex.getToken(), Token(Token::Type::None, "", 1, 3));
     }
     void operatorTest32(){
-        std::stringstream ss("{*}()"); Lexer lex(ss);
+        std::stringstream ss("{*}()/="); Lexer lex(ss);
         QCOMPARE(lex.getToken(), Token(Token::Type::Operator, "{", 1, 0));
         QCOMPARE(lex.getToken(), Token(Token::Type::Operator, "*", 1, 1));
         QCOMPARE(lex.getToken(), Token(Token::Type::Operator, "}", 1, 2));
         QCOMPARE(lex.getToken(), Token(Token::Type::Operator, "(", 1, 3));
         QCOMPARE(lex.getToken(), Token(Token::Type::Operator, ")", 1, 4));
-        QCOMPARE(lex.getToken(), Token(Token::Type::None, "", 1, 5));
+        QCOMPARE(lex.getToken(), Token(Token::Type::Operator, "/=", 1, 5));
+        QCOMPARE(lex.getToken(), Token(Token::Type::None, "", 1, 7));
     }
     void strTest1(){
         std::stringstream ss("\"\""); Lexer lex(ss);
@@ -253,13 +254,13 @@ private slots:
         try{
             std::cout<<lex.getToken()<<"\n";
             QCOMPARE("multiline string unhandled", "");
-        }catch(LexerException exc){
+        }catch(LexerException &exc){
             QCOMPARE(exc, LexerException("multiline string literal", 1, 2));
         }
         try{
             std::cout<<lex.getToken()<<"\n";
             QCOMPARE("stream ended on unfinished string unhandled", "");
-        }catch(LexerException exc){
+        }catch(LexerException &exc){
             QCOMPARE(exc, LexerException("stream ended on unfinished string", 2, 1));
         }
         QCOMPARE(lex.getToken(), Token(Token::Type::None, "", 2, 1));
@@ -373,8 +374,78 @@ private slots:
         QCOMPARE(lex.getToken(), Token(Token::Type::None, "", 1, 1));
     }
 
+    void asd(){
+        std::cout<<"======================================================================================\n";
+    }
+
+    void checkExceptions(Parser &par){
+        for(auto &exc:par.postponableExceptions){std::cout<<exc.what()<<"\n";} QCOMPARE(par.postponableExceptions.size(), 0);
+    }
+
+    void basicExpressionTesting1(){
+        std::stringstream ss("1234"); Lexer lex(ss); Parser par(lex);
+        Q_ASSERT(PrimaryExpression(Token(Token::Type::Literal_int, 1234))==par.tryGetPrimaryExpression());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting2(){
+        std::stringstream ss("asdf"); Lexer lex(ss); Parser par(lex);
+        Q_ASSERT(PrimaryExpression(Token(Token::Type::Id, "asdf"))==par.tryGetPrimaryExpression());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting3(){
+        std::stringstream ss("asd()"); Lexer lex(ss); Parser par(lex);
+        Q_ASSERT(FunctionCall("asd")==par.tryGetFunctionCall());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting4(){
+        std::stringstream ss("asd()"); Lexer lex(ss); Parser par(lex);
+        Q_ASSERT(FunctionCall("asd")==par.tryGetAccessExpression());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting5(){
+        std::stringstream ss("asd++"); Lexer lex(ss); Parser par(lex);
+        Q_ASSERT(CrementationExpression("++", "asd", true)==par.tryGetCrementationExpression());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting6(){
+        std::stringstream ss("++asd"); Lexer lex(ss); Parser par(lex);
+        Q_ASSERT(CrementationExpression("++", "asd", false)==par.tryGetCrementationExpression());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting7(){
+        std::stringstream ss("-asd"); Lexer lex(ss); Parser par(lex);
+        Q_ASSERT(UnaryExpression("-", std::make_unique<PrimaryExpression>(Token(Token::Type::Id, "asd")))==par.tryGetUnaryExpression());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting8(){
+        std::stringstream ss("++asd"); Lexer lex(ss); Parser par(lex);
+        Q_ASSERT(CrementationExpression("++", "asd", false)==par.tryGetUnaryExpression());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting9(){
+        std::stringstream ss("asd ( )"); Lexer lex(ss); Parser par(lex);
+        Q_ASSERT(FunctionCall("asd")==par.tryGetUnaryExpression());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting10(){
+        std::stringstream ss("asd++"); Lexer lex(ss); Parser par(lex);
+        Q_ASSERT(CrementationExpression("++", "asd", true)==par.tryGetUnaryExpression());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting11(){
+        std::stringstream ss("asd"); Lexer lex(ss); Parser par(lex);
+        Q_ASSERT(PrimaryExpression(Token(Token::Type::Id, "asd"))==par.tryGetUnaryExpression());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting13(){
+        std::stringstream ss("123*5"); Lexer lex(ss); Parser par(lex);
+        Q_ASSERT(BinaryExpression("*", std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 123)), std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 5)))==par.tryGetMultExpression());
+        checkExceptions(par);
+    }
+
     void cleanupTestCase(){}
 };
+
 
 Token tokenbuf(Token::Type::None, "");
 void checkToken(Lexer &lexer, Token token){

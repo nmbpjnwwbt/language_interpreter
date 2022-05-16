@@ -4,13 +4,15 @@ QT += testlib
 
 SOURCES += \
         lexer.cpp \
-        main.cpp
+        main.cpp \
+        parser.cpp
 
 DISTFILES += \
     syntax.ebnf
 
 HEADERS += \
-    lexer.h
+    lexer.h \
+    parser.h
 
 
 

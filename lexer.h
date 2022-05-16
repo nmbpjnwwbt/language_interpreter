@@ -5,16 +5,15 @@
 #include <sstream>
 #include <vector>
 #include <stack>
+#include <list>
 #include <map>
 #include <iostream>
 
 
-bool isLetter(int ch);
-bool isNumber(int ch);
 
-class LexerException : std::exception{
+class LexerException :public std::runtime_error{
     public:
-    LexerException(std::string reason, int line, int number){
+    LexerException(std::string reason, int line, int number) :std::runtime_error(reason){
 
         this->reason=reason;
         this->line=line;
@@ -29,7 +28,8 @@ class LexerException : std::exception{
     const char* what() const noexcept {return what_str.c_str();}
 };
 
-class Token{public:
+class Token{
+    public:
 
     enum Type{
         None, // failed to construct
@@ -40,42 +40,46 @@ class Token{public:
         Literal_float,
         Literal_str,
         Operator,
+        EndOfInstruction,
         Id,
         Comment,
         Keyword,
         Warning,
     };
 
-    friend std::ostream& operator<< (std::ostream& os, Token val);
+    friend std::ostream& operator<< (std::ostream &os, const Token &val);
 
     Token(Type type=Type::None, std::variant<std::string, int, float> value="", int line=-1, int character=-1);
-    Token(int line, int character, Type type, char ch);
-    Token(int line, int character, Type type, char ch1, char ch2);
+    Token(int line, int character, Type type, std::string str);
 
     std::string toString() const;
 
     bool operator!=(const Token in) const{return !(*this==in);}
     bool operator==(const Token in) const{
 #ifdef TESTS
-        bool out= in.type==type && in.val==val && in.line==line && in.character==character;
+        bool out= in.type_==type_ && in.pos.first==pos.first && in.pos.second==pos.second && in.pos.first==pos.first;
         if(!out)
-            std::cout<<(in.type==type)<<(in.val==val)<<(in.line==line)<<(in.character==character)<<" "<<in.toString()<<"\n     "<<toString()<<"\n";
+            std::cout<<(in.type_==type_)<<(in.val==val)<<(in.pos.first==pos.first)<<(in.pos.second==pos.second)<<" "<<in.toString()<<"\n     "<<toString()<<"\n";
         return out;
 #else
-        return in.type==type && in.val==val && in.line==line && in.character==character;
+        return in.type_==type_ && in.val==val && in.pos.first==pos.first && in.pos.second==pos.second;
 #endif
     }
-    explicit operator bool() const{return type!=Type::None;}
+    operator bool() const{return type_!=Type::None;}
+
+    Type type(){return type_;};
+    bool isValue(std::string str);
+    std::string getStrVal();
+    std::pair<int, int> pos;
+    const std::variant<std::string, int, float> value(){return val;};
 
     private:
-    Type type;
+    Type type_;
     std::variant<std::string, int, float> val;
-    int line=0, character=0;
 };
-extern const std::map<Token::Type, std::string> tokenToStr;
 
 
-std::ostream& operator<< (std::ostream& os, const Token val);
+std::ostream& operator<< (std::ostream &os, const Token &val);
 
 class istreamProxy{
 public:
@@ -92,26 +96,29 @@ public:
     std::streampos tellg() const{return _in->tellg();}
     std::istream& seekg(std::streampos pos){return _in->seekg(pos);}
 
-    int line(){return _line;}
-    int character(){return _character;}
+    int line() const{return _line;}
+    int character() const{return _character;}
+    int decrement_line(){return --_line;}
 
-    int _line=1, _character=0;
 
     private:
+    int _line=1, _character=0;
     std::istream *_in;
     std::stack<char> buffer;
 };
 
 class Lexer{
-public:
+    public:
     Lexer(std::istream &in):is(in){}
 
+    Token peekToken(unsigned int n=0);
     Token getToken();
 
     istreamProxy is;
     std::vector<Token> warnings;
-    private:
 
+    private:
+    Token advancePeek();
     Token getOperatorToken();
     Token getStringToken();
     Token getCommentToken();
@@ -120,6 +127,7 @@ public:
 
     void skipWhites();
 
+    std::list<Token> peeked;
 };
 
 

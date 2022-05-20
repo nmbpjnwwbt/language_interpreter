@@ -11,6 +11,7 @@ class Tests: public QObject{
     Q_OBJECT
 public:
 
+
 private slots:
     void initTestCase(){
     }
@@ -379,71 +380,123 @@ private slots:
     }
 
     void checkExceptions(Parser &par){
-        for(auto &exc:par.postponableExceptions){std::cout<<exc.what()<<"\n";} QCOMPARE(par.postponableExceptions.size(), 0);
+        for(auto &exc:par.errors){std::cout<<exc.what()<<"\n";} QCOMPARE(par.errors.size(), 0);
     }
 
     void basicExpressionTesting1(){
-        std::stringstream ss("1234"); Lexer lex(ss); Parser par(lex);
-        Q_ASSERT(PrimaryExpression(Token(Token::Type::Literal_int, 1234))==par.tryGetPrimaryExpression());
+        std::stringstream ss("1234"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(PrimaryExpression(Token(Token::Type::Literal_int, 1234)).str(), par.tryGetPrimaryExpression()->str());
         checkExceptions(par);
     }
     void basicExpressionTesting2(){
-        std::stringstream ss("asdf"); Lexer lex(ss); Parser par(lex);
-        Q_ASSERT(PrimaryExpression(Token(Token::Type::Id, "asdf"))==par.tryGetPrimaryExpression());
+        std::stringstream ss("asdf"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(PrimaryExpression(Token(Token::Type::Id, "asdf")).str(), par.tryGetPrimaryExpression()->str());
         checkExceptions(par);
     }
     void basicExpressionTesting3(){
-        std::stringstream ss("asd()"); Lexer lex(ss); Parser par(lex);
-        Q_ASSERT(FunctionCall("asd")==par.tryGetFunctionCall());
+        std::stringstream ss("asd()"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(FunctionCall("asd").str(), par.tryGetFunctionCall()->str());
         checkExceptions(par);
     }
     void basicExpressionTesting4(){
-        std::stringstream ss("asd()"); Lexer lex(ss); Parser par(lex);
-        Q_ASSERT(FunctionCall("asd")==par.tryGetAccessExpression());
+        std::stringstream ss("asd()"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(FunctionCall("asd").str(), par.tryGetAccessExpression()->str());
         checkExceptions(par);
     }
     void basicExpressionTesting5(){
-        std::stringstream ss("asd++"); Lexer lex(ss); Parser par(lex);
-        Q_ASSERT(CrementationExpression("++", "asd", true)==par.tryGetCrementationExpression());
+        std::stringstream ss("asd++"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(CrementationExpression("++", "asd", true).str(), par.tryGetCrementationExpression()->str());
         checkExceptions(par);
     }
     void basicExpressionTesting6(){
-        std::stringstream ss("++asd"); Lexer lex(ss); Parser par(lex);
-        Q_ASSERT(CrementationExpression("++", "asd", false)==par.tryGetCrementationExpression());
+        std::stringstream ss("++asd"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(CrementationExpression("++", "asd", false).str(), par.tryGetCrementationExpression()->str());
         checkExceptions(par);
     }
     void basicExpressionTesting7(){
-        std::stringstream ss("-asd"); Lexer lex(ss); Parser par(lex);
-        Q_ASSERT(UnaryExpression("-", std::make_unique<PrimaryExpression>(Token(Token::Type::Id, "asd")))==par.tryGetUnaryExpression());
+        std::stringstream ss("-asd"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(UnaryExpression("-", std::make_unique<PrimaryExpression>(Token(Token::Type::Id, "asd"))).str(), par.tryGetUnaryExpression()->str());
         checkExceptions(par);
     }
     void basicExpressionTesting8(){
-        std::stringstream ss("++asd"); Lexer lex(ss); Parser par(lex);
-        Q_ASSERT(CrementationExpression("++", "asd", false)==par.tryGetUnaryExpression());
+        std::stringstream ss("++asd"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(CrementationExpression("++", "asd", false).str(), par.tryGetUnaryExpression()->str());
         checkExceptions(par);
     }
     void basicExpressionTesting9(){
-        std::stringstream ss("asd ( )"); Lexer lex(ss); Parser par(lex);
-        Q_ASSERT(FunctionCall("asd")==par.tryGetUnaryExpression());
+        std::stringstream ss("asd ( )"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(FunctionCall("asd").str(), par.tryGetUnaryExpression()->str());
         checkExceptions(par);
     }
     void basicExpressionTesting10(){
-        std::stringstream ss("asd++"); Lexer lex(ss); Parser par(lex);
-        Q_ASSERT(CrementationExpression("++", "asd", true)==par.tryGetUnaryExpression());
+        std::stringstream ss("asd++"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(CrementationExpression("++", "asd", true).str(), par.tryGetUnaryExpression()->str());
         checkExceptions(par);
     }
     void basicExpressionTesting11(){
-        std::stringstream ss("asd"); Lexer lex(ss); Parser par(lex);
-        Q_ASSERT(PrimaryExpression(Token(Token::Type::Id, "asd"))==par.tryGetUnaryExpression());
+        std::stringstream ss("asd"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(PrimaryExpression(Token(Token::Type::Id, "asd")).str(), par.tryGetUnaryExpression()->str());
         checkExceptions(par);
     }
     void basicExpressionTesting13(){
-        std::stringstream ss("123*5"); Lexer lex(ss); Parser par(lex);
-        Q_ASSERT(BinaryExpression("*", std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 123)), std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 5)))==par.tryGetMultExpression());
+        std::stringstream ss("123*5"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(BinaryExpression("*", std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 123)),
+                                       std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 5))).str(),
+                 par.tryGetMultExpression()->str());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting14(){
+        std::stringstream ss("123^5"); CommentlessLexer lex(ss); Parser par(lex);
+        QCOMPARE(BinaryExpression("^", std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 123)),
+                                       std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 5))).str(),
+                 par.tryGetAssignmentExpression()->str());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting15(){
+        std::stringstream ss("aff+3=6-5*8"); CommentlessLexer lex(ss); Parser par(lex);
+        std::string right=BinaryExpression("=",
+                                           std::make_unique<BinaryExpression>("+",
+                                                            std::make_unique<PrimaryExpression>(Token(Token::Type::Id, "aff")),
+                                                            std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 3))),
+                                           std::make_unique<BinaryExpression>("-",
+                                                            std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 6)),
+                                                            std::make_unique<BinaryExpression>("*",
+                                                                             std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 5)),
+                                                                             std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 8))))
+                          ).str();
+        QCOMPARE(right, par.tryGetAssignmentExpression()->str());
+        checkExceptions(par);
+    }
+    void basicExpressionTesting16(){
+        std::stringstream ss("(123^5)"); CommentlessLexer lex(ss); Parser par(lex);
+        Expression expr=Expression(std::make_unique<Expression>(std::make_unique<BinaryExpression>("^", std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 123)),
+                                                                                                   std::make_unique<PrimaryExpression>(Token(Token::Type::Literal_int, 5)))));
+
+        QCOMPARE(expr.str(), par.tryGetExpression()->str());
         checkExceptions(par);
     }
 
-    void cleanupTestCase(){}
+    void cleanupTestCase(){
+        std::fstream file;
+        file.open("test.int", std::ios::in|std::ios::binary);
+        CommentlessLexer lex(file);
+        Parser par(lex);
+        par.tryGetInstructions();
+        if(lex.peekToken().type()!=Token::Type::None){
+            std::cout<<lex.peekToken()<<"\n";
+        }
+        if(par.errors.size())
+            std::cout<<"\n=======================================================\n";
+        for(auto err:par.errors){
+            std::cout<<"<<<<<ERROR WHILE PARSING>>>>>:  "<<err.what()<<std::endl;
+        }
+        if(par.errors.size()){
+            std::cout<<"=======================================================\n\n";
+            exit(-1);
+        }
+        if(lex.peekToken().type()!=Token::Type::None)
+            exit(-1);
+    }
 };
 
 

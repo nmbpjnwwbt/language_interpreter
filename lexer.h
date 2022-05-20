@@ -84,9 +84,8 @@ std::ostream& operator<< (std::ostream &os, const Token &val);
 class istreamProxy{
 public:
 
-    explicit istreamProxy(std::istream &in){
-        _in=&in;
-    }
+    explicit istreamProxy(std::istream &in):_in(&in){}
+    istreamProxy(istreamProxy &in):_line(in._line), _character(in._character), _in(in._in), buffer(in.buffer){}
 
     int get();
 
@@ -110,6 +109,7 @@ public:
 class Lexer{
     public:
     Lexer(std::istream &in):is(in){}
+    Lexer(Lexer &in):is(in.is), warnings(in.warnings), peeked(in.peeked){}
 
     Token peekToken(unsigned int n=0);
     Token getToken();
@@ -117,8 +117,8 @@ class Lexer{
     istreamProxy is;
     std::vector<Token> warnings;
 
-    private:
-    Token advancePeek();
+    protected:
+    virtual Token advancePeek();
     Token getOperatorToken();
     Token getStringToken();
     Token getCommentToken();
@@ -128,6 +128,23 @@ class Lexer{
     void skipWhites();
 
     std::list<Token> peeked;
+};
+
+class CommentlessLexer :public Lexer{
+public:
+    CommentlessLexer(Lexer &in):Lexer(in){}
+    CommentlessLexer(CommentlessLexer &in):Lexer(in){}
+    CommentlessLexer(std::istream &in):Lexer(in){}
+
+private:
+    Token advancePeek(){
+        Token tok=Lexer::advancePeek();
+        while(tok.type()==Token::Type::Comment)
+            tok=Lexer::advancePeek();
+        if(tok.type()==Token::Type::Comment)
+        return tok;
+    }
+
 };
 
 

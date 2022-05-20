@@ -1,11 +1,61 @@
+int GCD(@int a, int b){
+    @int buf=b, buf2; // b jest stałe, podane przez wartość (w razie zdjęcia niemutowalności)
 
-++=    //asdfghjkl1234
-1234//hehe
-1/2
-123.5423
-123 52983568273456298375692835692836598236592834659823456928357692835692835769837452
-123.89172000000000000000000000000000000001
-test false trye true whilez "aaa"
-int ints in str string
-bool @{float if() }else switch
- switcher break continue
+    print(buf2); // 0
+
+    while(buf){
+        buf2=buf;
+        buf=a%buf2;
+        a=buf2; // a jest mutowalne
+        continue;
+        break;
+    }
+    return a; // zwracane przez wartość
+}
+
+int a=16, b=9;
+{
+    print(GCD(a, b)); // 8
+    b = GCD(a, b); // błąd, przypisanie do stałej
+    @int b = GCD(a, b); //nowa zmienna przykrywa starą
+} //                      ale nie poza blokiem
+print(b); // 9
+
+{a=8;} // to nie jest nowa zmienna
+print(a); // 8
+
+int GCD(int a){
+    if(a){
+        return GCD(a-1)+2;
+    }else
+        return 5;
+}
+int GCD(int a){return 8;}
+
+switch(a){
+    0 -> {print("asd");}
+    1 -> print("dsa");
+    "16" -> print("this will be printed");
+    GCD -> print("it's 8! Meaning true. Meaning \"else\" will never run"); // musi przyjmować dokładnie jeden parametr, otrzyma zmienną "a"
+    else -> print("123");
+    //2 -> print("asd"); print("dsa"); // błąd, powinien być blok lub jedna instrukcja
+}
+
+@str line; // ""
+
+if(GCD())
+    print("affff");
+
+if(a==line=getline()){
+    print("correct!");
+}else if(line=="super_secret$tring")
+    print("how did you know?");
+else{
+    print("nope");
+}
+
+print(GCD()); // 8
+print(GCD(5, 8)); // 4
+
+@str asd="bsd";
+asd[0]; // "asd"

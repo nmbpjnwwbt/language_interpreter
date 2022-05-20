@@ -329,6 +329,7 @@ Token Lexer::getIdToken(){
         {"else", Token::Type::Keyword},
         {"while", Token::Type::Keyword},
         {"break", Token::Type::Keyword},
+        {"return", Token::Type::Keyword},
         {"continue", Token::Type::Keyword},
         {"bool", Token::Type::Type_identifier},
         {"int", Token::Type::Type_identifier},
@@ -341,7 +342,7 @@ Token Lexer::getIdToken(){
     for(ch=is.get(); isLetter(ch)||isNumber(ch); ch=is.get()){
         id+=char(ch);
     }
-    is.putback(ch);
+    is.putback_buffed(ch);
     if(id=="true")
         return Token(Token::Type::Literal_bool, 1, is.line(), pos);
     if(id=="false")

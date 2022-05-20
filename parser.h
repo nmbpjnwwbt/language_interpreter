@@ -5,7 +5,7 @@
 #include "memory"
 
 
-class ParserException :public std::runtime_error{public:
+class ParError{public:
     enum Reasons{
         ExpectedExpression,
         ExpectedTypeIdentifier,
@@ -17,24 +17,35 @@ class ParserException :public std::runtime_error{public:
         ExpectedPrimaryExpression,
         ExpectedUnaryExpression,
         ExpectedAdditiveExpression,
-        ExpectedMultiplicativeExpression
+        ExpectedMultiplicativeExpression,
+        ExpectedEOI,
+        ExpectedBracket,
+        ExpectedBlock,
+        ExpectedInstruction,
+        ExpectedEndOfBlock,
+        UnexpectedKeyword,
+        UnexpectedOperator,
+        ExpectedVariableDeclaration,
+        ExpectedSwitchBlock,
+        ExpectedCaseOperator
     };
 
     static const std::map<Reasons, std::string> reasonsToStr;
-    ParserException(Reasons reason, int line, int number) :std::runtime_error("ParserException"){
+    ParError(Reasons reason, int line, int number){
         this->reason=reason;
         this->line=line;
         this->number=number;
         what_str=(std::to_string(line)+":"+std::to_string(number)+": "+reasonsToStr.at(reason));
     }
-    ParserException(Reasons reason, std::pair<int, int> pos) :ParserException(reason, pos.first, pos.second){}
+    ParError(Reasons reason, std::pair<int, int> pos) :ParError(reason, pos.first, pos.second){}
+    ParError(Reasons reason, std::string str, std::pair<int, int> pos) :ParError(reason, pos.first, pos.second){what_str+=str;}
 
-    bool operator==(const ParserException in) const{return reason==in.reason && in.line==line && in.number==number;}
+    bool operator==(const ParError in) const{return reason==in.reason && in.line==line && in.number==number;}
 
     Reasons reason;
     std::string what_str;
     int line, number;
-    const char* what() const noexcept {return what_str.c_str();}
+    std::string what() const noexcept {return what_str.c_str();}
 };
 
 struct Type{public:
@@ -58,6 +69,8 @@ struct Type{public:
 
     bool operator!=(const TypeNum b) const{return type!=b;}
     bool operator==(const TypeNum b) const{return type==b;}
+    bool operator==(const Type &b) const{return type==b.type && mutability==b.mutability;}
+    bool operator!=(const Type &b) const{return !(*this==b);}
 
     TypeNum type;
     bool mutability;
@@ -74,7 +87,21 @@ class Literal{
 
     Type type(){return type_;};
     bool isValue(std::string str);
-    std::string getStrVal();
+    std::string getStrVal(){
+        if(std::holds_alternative<std::string>(val))
+            return std::get<std::string>(val);
+        else
+            return "";
+    }
+    std::string str(){
+        if(std::holds_alternative<std::string>(val))
+            return std::get<std::string>(val);
+        else if(std::holds_alternative<int>(val))
+            return std::to_string(std::get<int>(val));
+        else if(std::holds_alternative<float>(val))
+            return std::to_string(std::get<float>(val));
+        else throw std::runtime_error("fix Literal::str(): "+std::to_string(val.index()));
+    }
     std::pair<int, int> pos;
 
     protected:
@@ -85,27 +112,42 @@ class Literal{
 class Value{
 
 };
+class InstructionBase{
+public:
 
+    bool operator==(const std::unique_ptr<InstructionBase> in) const{return in && (*this)==(*in.get());}
+    virtual bool operator==(const InstructionBase &in) const=0;
+};
 class BasicExpression{public:
-
-    virtual operator bool() const=0;
-    bool operator!=(const std::unique_ptr<BasicExpression> in) const{return (*this==(*in));}
-    bool operator==(const std::unique_ptr<BasicExpression> in) const{return *this==in.get();}
-    virtual bool operator==(const BasicExpression *in) const=0;
-
+    virtual std::string str()=0;
     virtual Value eval(){throw std::runtime_error("eval not ready");}
 };
 
 class Expression :public BasicExpression{public:
     Expression(){}
+    Expression(std::unique_ptr<BasicExpression> in){expr=std::move(in);}
+    Expression(const Expression &in){expr=std::move(in.expr);}// multiple instances of the same Expression can exist
 
-    operator bool() const{return false;}
-    bool operator==(const std::unique_ptr<BasicExpression> in) const{return *this==in.get();}
-    bool operator==(const BasicExpression *in) const{
-        const Expression *ptr=dynamic_cast<const Expression*>(in); return ptr;
+    operator bool() const{return expr!=nullptr;}
+    Expression operator=(const std::unique_ptr<BasicExpression>)=delete;
+    virtual std::string str(){return "{"+(expr?expr->str():"nullptr")+"}";}
+
+    std::shared_ptr<BasicExpression> expr=nullptr;
+};
+class ExpressionWrapper :public InstructionBase{
+public:
+    ExpressionWrapper(std::unique_ptr<BasicExpression> in){
+        Expression *ptr=dynamic_cast<Expression*>(in.get());
+        if(in.get() && !ptr) throw std::runtime_error("Expression wrapper takes only Expression");
+        in.release();
+        expr.reset(ptr);
+    }
+    bool operator==(const std::unique_ptr<InstructionBase> in) const{return in && (*this)==(*in.get());}
+    virtual bool operator==(const InstructionBase &in) const{
+        const ExpressionWrapper *ptr=dynamic_cast<const ExpressionWrapper*>(&in); return expr && expr==ptr->expr;
     }
 
-
+    std::unique_ptr<Expression> expr;
 };
 class IdDeclaration{public:
     IdDeclaration(const std::string id="");
@@ -128,24 +170,32 @@ class VariableDeclaration{public:
     Type type;
     IdDeclaration idDeclaration;
 };
-class VariablesDeclaration{public:
+class VariablesDeclaration :public InstructionBase{public:
     VariablesDeclaration():type(Type::TypeNum::Bool){}
     VariablesDeclaration(VariableDeclaration vd):type(vd.type){idDeclarations={vd.idDeclaration};}
     VariablesDeclaration(Type::TypeNum type, IdDeclaration idd):type(type){idDeclarations={idd};}
     VariablesDeclaration(std::string type, IdDeclaration idd):type(type){idDeclarations={idd};}
 
+    void push_back(const IdDeclaration &idd){idDeclarations.push_back(idd);}
 
-    operator bool() const{return idDeclarations.size()>0;}
+    bool operator==(const std::unique_ptr<InstructionBase> in) const{return in && (*this)==(*in.get());}
+    virtual bool operator==(const InstructionBase &in) const{
+        const VariablesDeclaration *ptr=dynamic_cast<const VariablesDeclaration*>(&in); return ptr && type==ptr->type && idDeclarations==ptr->idDeclarations;
+    }
 
     Type type;
     std::vector<IdDeclaration> idDeclarations={};
 };
-class Block{public:
+class Block :public InstructionBase{public:
 
     Block(){}
 
     operator bool() const{return false;}
-
+    bool operator==(const std::unique_ptr<InstructionBase> in) const{return in && (*this)==(*in.get());}
+    virtual bool operator==(const InstructionBase &in) const{
+        const VariablesDeclaration *ptr=dynamic_cast<const VariablesDeclaration*>(&in);
+        return ptr;
+    }
 
 };
 class FunctionHeaderDeclaration{public:
@@ -156,39 +206,39 @@ class FunctionHeaderDeclaration{public:
     FunctionHeaderDeclaration(Type retType, std::string id, std::vector<VariableDeclaration> params):
         retType(retType), id(id), params(params){}
 
+    void push_back(const VariableDeclaration &vd){params.push_back(vd);}
     operator bool() const{return id.size()>0;}
 
     Type retType;
     std::string id;
     std::vector<VariableDeclaration> params;
 };
-class FunctionDeclaration{public:
+class FunctionDeclaration :public InstructionBase{public:
 
-    FunctionDeclaration():id(""), params({}), body(Block()){}
-    FunctionDeclaration(FunctionHeaderDeclaration fhd, Block body):
-        id(fhd.id), params(fhd.params), body(body){}
-    FunctionDeclaration(std::string id, std::vector<VariableDeclaration> params, Block body):
-        id(id), params(params), body(body){}
+    FunctionDeclaration(FunctionHeaderDeclaration fhd, std::unique_ptr<InstructionBase> body);
 
     operator bool() const{return id.size()>0 && body;}
+    bool operator==(const std::unique_ptr<InstructionBase> in) const{return in && (*this)==(*in.get());}
+    virtual bool operator==(const InstructionBase &in) const{
+        const FunctionDeclaration *ptr=dynamic_cast<const FunctionDeclaration*>(&in);
+        return ptr && id==ptr->id && params==ptr->params && ((body==nullptr && ptr->body==nullptr) || (body!=nullptr && ptr->body!=nullptr && (*body)==*(ptr->body)));
+    }
 
     std::string id;
     std::vector<VariableDeclaration> params;
-    Block body;
+    std::unique_ptr<Block> body;
 };
-
-
 
 class FunctionCall :public BasicExpression{public:
     FunctionCall(std::string id=""):id(id){}
 
-    operator bool() const{return id.size();};
-    bool operator==(const std::unique_ptr<BasicExpression> in) const{return *this==in.get();}
-    bool operator==(const BasicExpression *in) const{
-        const FunctionCall *ptr=dynamic_cast<const FunctionCall*>(in);
-        return ptr && id==ptr->id && arguments==ptr->arguments;
-    }
     void push_back(Expression expr){arguments.push_back(expr);}
+    void push_back(std::unique_ptr<BasicExpression> expr){
+        Expression *ptr=dynamic_cast<Expression*>(expr.get());
+        if(ptr!=nullptr)
+            arguments.push_back(Expression(*ptr)); // copy constructor, safe
+    }
+    std::string str();
 
     std::string id;
     std::vector<Expression> arguments;
@@ -200,11 +250,7 @@ class PrimaryExpression :public BasicExpression{public:
     PrimaryExpression(Token tok);
 
     operator bool() const;
-    bool operator==(const std::unique_ptr<BasicExpression> in) const{return *this==in.get();}
-    bool operator==(const BasicExpression *in) const{
-        const PrimaryExpression *ptr=dynamic_cast<const PrimaryExpression*>(in);
-        return ptr && val==ptr->val;
-    }
+    std::string str();
 
     //             \\ id //
     std::variant<std::string, Literal, Expression> val;
@@ -213,12 +259,7 @@ class AccessExpression :public BasicExpression{public:
     AccessExpression(){}
     AccessExpression(std::unique_ptr<BasicExpression> str, std::unique_ptr<BasicExpression> accessExpr):expr(std::move(str)), accessExpr(std::move(accessExpr)){}
 
-    operator bool() const{return expr!=nullptr && (*expr) && accessExpr!=nullptr && (*accessExpr);}
-    bool operator==(const std::unique_ptr<BasicExpression> in) const{return *this==in.get();}
-    bool operator==(const BasicExpression *in) const{
-        const AccessExpression *ptr=dynamic_cast<const AccessExpression*>(in);
-        return ptr && (*expr)==(*(ptr->expr)) && (*accessExpr)==(*(ptr->accessExpr));
-    }
+    std::string str();
 
     std::unique_ptr<BasicExpression> expr=nullptr;
     std::unique_ptr<BasicExpression> accessExpr=nullptr;
@@ -232,12 +273,7 @@ class CrementationExpression :public BasicExpression{public:
         else throw std::runtime_error(oper+" is not a crementation operator");
     }
 
-    operator bool() const{return id.size();}
-    bool operator==(const std::unique_ptr<BasicExpression> in) const{return *this==in.get();}
-    bool operator==(const BasicExpression *in) const{
-        const CrementationExpression *ptr=dynamic_cast<const CrementationExpression*>(in);
-        return ptr && post==ptr->post && this->in==ptr->in && id==ptr->id;
-    }
+    std::string str();
 
     bool post;
     bool in;
@@ -247,75 +283,159 @@ class UnaryExpression :public BasicExpression{public:
     UnaryExpression(){}
     UnaryExpression(std::string oper, std::unique_ptr<BasicExpression> expr):oper(oper), expr(std::move(expr)){}
 
-    operator bool() const{return oper.size() && expr!=nullptr && (*expr);}
-    bool operator==(const std::unique_ptr<BasicExpression> in) const{return *this==in.get();}
-    bool operator==(const BasicExpression *in) const{
-        const UnaryExpression *ptr=dynamic_cast<const UnaryExpression*>(in);
-        return ptr && oper==ptr->oper && (*expr)==(*(ptr->expr));
-    }
+    std::string str();
 
     std::string oper="";
     std::unique_ptr<BasicExpression> expr;
 };
 class BinaryExpression :public BasicExpression{public:
-    BinaryExpression(){}
     BinaryExpression(std::string oper, std::unique_ptr<BasicExpression> lexpr, std::unique_ptr<BasicExpression> rexpr):oper(oper), lexpr(std::move(lexpr)), rexpr(std::move(rexpr)){}
 
-    operator bool() const{return oper.size() && lexpr!=nullptr && (*lexpr) && rexpr!=nullptr && (*rexpr);}
-    bool operator==(const std::unique_ptr<BasicExpression> in) const{return *this==in.get();}
-    bool operator==(const BasicExpression *in) const{
-        const BinaryExpression *ptr=dynamic_cast<const BinaryExpression*>(in);
-        return ptr && oper==ptr->oper && (*lexpr)==(*(ptr->lexpr)) && (*rexpr)==(*(ptr->rexpr));
-    }
+    std::string str();
 
     std::string oper;
     std::unique_ptr<BasicExpression> lexpr, rexpr;
 };
-class SpecialInstruction{};
-class Instruction{};
-class Instructions{};
-class While{};
-class If{};
-class Switch{};
+class CaseExpression :public Expression{public:
+    CaseExpression(std::unique_ptr<BasicExpression> in, std::string oper=""):oper(oper){expr=std::move(in);}
+    CaseExpression(const CaseExpression &in){expr=std::move(in.expr); oper=in.oper;}
+
+    operator bool() const{return expr!=nullptr || oper=="else";}
+    CaseExpression operator=(const std::unique_ptr<BasicExpression>)=delete;
+    virtual std::string str(){return "{"+oper+(expr?expr->str():"nullptr")+"}";}
+
+    std::string oper;
+};
+class SpecialInstruction :public InstructionBase{
+public:
+    enum Type{
+        Break,
+        Continue,
+        Return
+    };
+    SpecialInstruction(Type type, std::unique_ptr<Expression> expr=nullptr):type(type), expr(std::move(expr)){}
+
+    bool operator==(const std::unique_ptr<InstructionBase> in) const{return in && (*this)==(*in.get());}
+    virtual bool operator==(const InstructionBase &in) const{
+        const SpecialInstruction *ptr=dynamic_cast<const SpecialInstruction*>(&in);
+        return ptr && type==ptr->type && expr==ptr->expr;
+    }
+
+    Type type;
+    std::unique_ptr<Expression> expr;
+};
+class While;
+class If;
+class Switch;
+class Instructions :public InstructionBase{public:
+    Instructions(){}
+    Instructions(std::unique_ptr<InstructionBase> in):val({std::move(in)}){}
+
+    bool operator==(const std::unique_ptr<InstructionBase> in) const{return in && (*this)==(*in.get());}
+    virtual bool operator==(const InstructionBase &in) const{
+        const Instructions *ptr=dynamic_cast<const Instructions*>(&in);
+        return ptr && val==ptr->val;
+    }
+    void push_back(std::unique_ptr<InstructionBase> in){val.push_back(std::move(in));}
+
+    std::vector<std::shared_ptr<InstructionBase>> val;
+};
+class While :public InstructionBase{public:
+    While(std::unique_ptr<BasicExpression> condition, std::unique_ptr<InstructionBase> body):condition(std::move(condition)), body(std::move(body)){}
+
+    bool operator==(const std::unique_ptr<InstructionBase> in) const{return in && (*this)==(*in.get());}
+    virtual bool operator==(const InstructionBase &in) const{
+        const While *ptr=dynamic_cast<const While*>(&in);
+        return ptr && condition==ptr->condition && body==ptr->body;
+    }
+
+    std::unique_ptr<BasicExpression> condition;
+    std::unique_ptr<InstructionBase> body;
+};
+class If :public InstructionBase{public:
+    If(std::unique_ptr<BasicExpression> condition, std::unique_ptr<InstructionBase> body):condition(std::move(condition)), body(std::move(body)){}
+
+    bool operator==(const std::unique_ptr<InstructionBase> in) const{return in && (*this)==(*in.get());}
+    virtual bool operator==(const InstructionBase &in) const{
+        const If *ptr=dynamic_cast<const If*>(&in);
+        return ptr && condition==ptr->condition && body==ptr->body;
+    }
+
+    std::unique_ptr<BasicExpression> condition;
+    std::unique_ptr<InstructionBase> body;
+    std::unique_ptr<InstructionBase> else_body=nullptr;
+};
+class Case :public InstructionBase{
+public:
+    Case(std::unique_ptr<CaseExpression> expr, std::unique_ptr<InstructionBase> body):expr(std::move(expr)), body(std::move(body)){}
+
+    bool operator==(const std::unique_ptr<InstructionBase> in) const{return in && (*this)==(*in.get());}
+    virtual bool operator==(const InstructionBase &in) const{
+        const Case *ptr=dynamic_cast<const Case*>(&in);
+        return ptr && expr==ptr->expr && body==ptr->body;
+    }
+
+    std::unique_ptr<CaseExpression> expr;
+    std::unique_ptr<InstructionBase> body;
+};
+class Switch :public InstructionBase{
+public:
+    Switch(std::unique_ptr<Expression> expr):expr(std::move(expr)){}
+
+    bool operator==(const std::unique_ptr<InstructionBase> in) const{return in && (*this)==(*in.get());}
+    virtual bool operator==(const InstructionBase &in) const{
+        const Switch *ptr=dynamic_cast<const Switch*>(&in);
+        return ptr && expr==ptr->expr && cases==ptr->cases;
+    }
+
+    void push_back(std::unique_ptr<Case> in){if(in!=nullptr) cases.push_back(std::move(in));}
+
+    std::unique_ptr<Expression> expr;
+    std::vector<std::shared_ptr<Case>> cases;
+};
 
 class Parser{public:
-    Parser(Lexer &lex);
+    Parser(CommentlessLexer &lex);
 
     IdDeclaration tryGetIdDeclaration();
     VariableDeclaration tryGetVariableDeclaration(); // call AFTER checking for function declaration
-    VariablesDeclaration tryGetVariablesDeclaration();
-    FunctionHeaderDeclaration tryGetFunctionHeaderDeclaration();  // still TODO
-    FunctionDeclaration tryGetFunctionDeclaration();              // TODO
-    //           \\ guaranteed not to return nullptr //
+    std::unique_ptr<InstructionBase> tryGetVariablesDeclaration();
+    FunctionHeaderDeclaration tryGetFunctionHeaderDeclaration();
+    std::unique_ptr<InstructionBase> tryGetFunctionDeclaration();
     std::unique_ptr<BasicExpression> tryGetFunctionCall();
     std::unique_ptr<BasicExpression> tryGetPrimaryExpression();
     std::unique_ptr<BasicExpression> tryGetAccessExpression();
     std::unique_ptr<BasicExpression> tryGetCrementationExpression();
     std::unique_ptr<BasicExpression> tryGetUnaryExpression();
+    std::unique_ptr<BasicExpression> tryGetBinaryExpression(std::vector<std::string> opers, std::unique_ptr<BasicExpression, std::default_delete<BasicExpression>>(*func)(Parser &par));
     std::unique_ptr<BasicExpression> tryGetMultExpression();
     std::unique_ptr<BasicExpression> tryGetAddExpression();
-    std::unique_ptr<BasicExpression> tryGetShiftExpression();     // TODO
-    std::unique_ptr<BasicExpression> tryGetRelationalExpression();// TODO
-    std::unique_ptr<BasicExpression> tryGetEqualityExpression();  // TODO
-    std::unique_ptr<BasicExpression> tryGetAndExpression();       // TODO
-    std::unique_ptr<BasicExpression> tryGetXorExpression();       // TODO
-    std::unique_ptr<BasicExpression> tryGetOrExpression();        // TODO
-    std::unique_ptr<BasicExpression> tryGetLAndExpression();      // TODO
-    std::unique_ptr<BasicExpression> tryGetLOrExpression();       // TODO
-    std::unique_ptr<BasicExpression> tryGetAssignmentExpression();// TODO
-    Expression tryGetExpression();                                // TODO
-    SpecialInstruction tryGetSpecialInstruction();                // TODO
-    Instruction tryGetInstruction();                              // TODO
-    Instructions tryGetInstructions();                            // TODO
-    Block tryGetBlock();                                          // TODO
-    While tryGetWhile();                                          // TODO
-    If tryGetIf();                                                // TODO
-    Switch tryGetSwitch();                                        // TODO
+    std::unique_ptr<BasicExpression> tryGetShiftExpression();
+    std::unique_ptr<BasicExpression> tryGetRelationalExpression();
+    std::unique_ptr<BasicExpression> tryGetEqualityExpression();
+    std::unique_ptr<BasicExpression> tryGetAndExpression();
+    std::unique_ptr<BasicExpression> tryGetXorExpression();
+    std::unique_ptr<BasicExpression> tryGetOrExpression();
+    std::unique_ptr<BasicExpression> tryGetLAndExpression();
+    std::unique_ptr<BasicExpression> tryGetLOrExpression();
+    std::unique_ptr<BasicExpression> tryGetAssignmentExpression();
+    std::unique_ptr<Expression> tryGetExpression();
+    std::unique_ptr<CaseExpression> tryGetCaseExpression();
+    std::unique_ptr<InstructionBase> tryGetSpecialInstruction();
+    std::unique_ptr<InstructionBase> tryGetInstruction();
+    Instructions tryGetInstructions();
+    std::unique_ptr<InstructionBase> tryGetBlock(bool singleLineToo=true);
+    std::unique_ptr<InstructionBase> tryGetConditionedInstruction(std::string keyw);
+    std::unique_ptr<InstructionBase> tryGetWhile();
+    std::unique_ptr<InstructionBase> tryGetIf();
+    std::unique_ptr<Case> tryGetCase();
+    std::unique_ptr<InstructionBase> tryGetSwitch();
 
-    bool checkForOperator(std::string op, int n=0){return lex.peekToken(n).type()==Token::Type::Operator && lex.peekToken(n).isValue(op);}
-    bool checkForOperators(std::vector<std::string> op, int n=0);
-    Lexer lex;
-    std::vector<ParserException> postponableExceptions;
+    bool checkForKeyword(std::string keyw, int n=0) const{return lex.peekToken(n).type()==Token::Type::Keyword && lex.peekToken(n).isValue(keyw);}
+    bool checkForOperator(std::string op,  int n=0) const{return lex.peekToken(n).type()==Token::Type::Operator && lex.peekToken(n).isValue(op);}
+    bool checkForOperators(std::vector<std::string> op, int n=0) const;
+    CommentlessLexer &lex;
+    std::vector<ParError> errors;
 };
 
 #endif // PARSER_H

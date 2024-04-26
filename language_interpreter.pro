@@ -1,7 +1,23 @@
 TEMPLATE = app
-CONFIG += console c++11
-CONFIG -= app_bundle
-CONFIG -= qt
+CONFIG += c++17
+QT += testlib
 
 SOURCES += \
-        main.cpp
+        lexer.cpp \
+        main.cpp \
+        old_parser.cpp \
+        parser.cpp
+
+DISTFILES += \
+    syntax.ebnf
+
+HEADERS += \
+    lexer.h \
+    old_parser.h \
+    parser.h
+
+
+
+
+target.path = .
+INSTALLS += target

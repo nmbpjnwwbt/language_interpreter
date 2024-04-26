@@ -2,7 +2,7 @@
 #include <iostream>
 #include <fstream>
 #define TESTS
-#include "parser.h"
+#include "old_parser.h"
 #include <QTest>
 #include <QtTest/QtTest>
 

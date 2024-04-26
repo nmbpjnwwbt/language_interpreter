@@ -34,18 +34,66 @@ class Token{
     enum Type{
         None, // failed to construct
         Invalid,
-        Type_identifier,
+        identifier_bool,
+        identifier_int,
+        identifier_float,
+        identifier_str,
         Literal_bool,
         Literal_int,
         Literal_float,
         Literal_str,
-        Operator,
+
+        At,
+        Minus,
+        Arrow,
+        Plus,
+        Or,
+        And,
+        Less,
+        More,
+        Eq,
+        PlusPlus,
+        OrOr,
+        AndAnd,
+        LessLess,
+        MoreMore,
+        EqEq,
+        Star,
+        Percent,
+        Xor,
+        Exclam,
+        MinusEq,
+        PlusEq,
+        OrEq,
+        AndEq,
+        LessEq,
+        MoreEq,
+        StarEq,
+        PercentEq,
+        XorEq,
+        ExclamEq,
+        Comma,
+        Bracket,
+        BracketEnd,
+        BlockBracket,
+        BlockBracketEnd,
+        SqBracket,
+        SqBracketEnd,
+        RSlash,
+        RSlashEq,
+
         EndOfInstruction,
         Id,
         Comment,
-        Keyword,
+        If,
+        Switch,
+        While,
+        Continue,
+        Break,
+        Return,
         Warning,
     };
+    static const std::map<Type, std::string> typeToStr;
 
     friend std::ostream& operator<< (std::ostream &os, const Token &val);
 
@@ -89,7 +137,7 @@ public:
 
     int get();
 
-    int peek() const;
+    int peek(unsigned int n=0);
     std::istream& putback(char c);
     std::istream& putback_buffed(char c);
     std::streampos tellg() const{return _in->tellg();}
@@ -101,9 +149,11 @@ public:
 
 
     private:
+    int advancePeek();
+
     int _line=1, _character=0;
     std::istream *_in;
-    std::stack<char> buffer;
+    std::list<char> buffer;
 };
 
 class Lexer{

@@ -5,6 +5,7 @@ QT += testlib
 SOURCES += \
         lexer.cpp \
         main.cpp \
+        old_parser.cpp \
         parser.cpp
 
 DISTFILES += \
@@ -12,6 +13,7 @@ DISTFILES += \
 
 HEADERS += \
     lexer.h \
+    old_parser.h \
     parser.h
 
 

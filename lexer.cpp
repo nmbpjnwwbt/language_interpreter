@@ -23,6 +23,52 @@ const std::map<Token::Type, std::string> tokenToStr={
 };
 } //namespace
 
+const std::map<Token::Type, std::string> Token::typeToStr={
+    {Token::Type::At, "@"},
+    {Token::Type::Minus, "-"},
+    {Token::Type::Arrow, "->"},
+    {Token::Type::Plus, "+"},
+    {Token::Type::Or, "|"},
+    {Token::Type::And, "&"},
+    {Token::Type::Less, "<"},
+    {Token::Type::More, ">"},
+    {Token::Type::Eq, "="},
+
+    {Token::Type::PlusPlus, "++"},
+    {Token::Type::OrOr, "||"},
+    {Token::Type::AndAnd, "&&"},
+    {Token::Type::LessLess, "<<"},
+    {Token::Type::MoreMore, ">>"},
+    {Token::Type::EqEq, "=="},
+
+    {Token::Type::Star, "*"},
+    {Token::Type::Percent, "%"},
+    {Token::Type::Xor, "^"},
+    {Token::Type::Exclam, "!"},
+
+    {Token::Type::MinusEq, "-="},
+    {Token::Type::PlusEq, "+="},
+    {Token::Type::OrEq, "|="},
+    {Token::Type::AndEq, "&="},
+    {Token::Type::LessEq, "<="},
+    {Token::Type::MoreEq, ">="},
+    {Token::Type::StarEq, "*="},
+    {Token::Type::PercentEq, "%="},
+    {Token::Type::XorEq, "^="},
+    {Token::Type::ExclamEq, "!="},
+
+    {Token::Type::Comma, ","},
+    {Token::Type::Bracket, "("},
+    {Token::Type::BracketEnd, ")"},
+    {Token::Type::BlockBracket, "{"},
+    {Token::Type::BlockBracketEnd, "}"},
+    {Token::Type::SqBracket, "["},
+    {Token::Type::SqBracketEnd, "]"},
+    {Token::Type::EndOfInstruction, ";"},
+    {Token::Type::RSlash, "/"},
+    {Token::Type::RSlashEq, "/="},
+};
+
 Token::Token(Type type, std::variant<std::string, int, float> value, int line, int character):
     type_(type),
     val(std::move(value)),
@@ -82,11 +128,17 @@ int istreamProxy::get(){
     return ch;
 }
 
-int istreamProxy::peek() const{
-    if(buffer.empty())
-        return _in->peek();
-    else
-        return buffer.top();
+int istreamProxy::peek(unsigned int n){
+    if(buffer.size()>n){
+        auto it=buffer.begin();
+        std::advance(it, n);
+        return *it;
+    }
+    while(buffer.size()<=n){
+        buffer.push_back(advancePeek());
+    }
+    return buffer.back();
+
 }
 
 std::istream& istreamProxy::putback(char c){
@@ -104,6 +156,24 @@ std::istream& istreamProxy::putback_buffed(char c){
         _line--;
     buffer.push(c);
     return *_in;
+}
+
+int istreamProxy::advancePeek(){
+    int ch;
+    if(buffer.empty())
+        ch=_in->get();
+    else{
+        ch=buffer.top();
+        buffer.pop();
+    }
+    if(ch==std::char_traits<char>::eof())
+        return ch;
+    _character++;
+    if(ch=='\n'){
+        _line++;
+        _character=0;
+    }
+    return ch;
 }
 
 Token Lexer::peekToken(unsigned int n){
